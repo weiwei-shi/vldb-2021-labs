@@ -33,6 +33,7 @@ type Context interface {
 	// The returned kv.Transaction is not nil, but it maybe pending or invalid.
 	// If the active parameter is true, call this function will wait for the pending txn
 	// to become valid.
+	// 如果active参数为true，则调用此函数将等待pending的txn变为有效。
 	Txn(active bool) (kv.Transaction, error)
 
 	// GetClient gets a kv.Client.

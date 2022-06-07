@@ -37,6 +37,8 @@ const bigTxnThreshold = 16
 // LockResolver resolves locks and also caches resolved txn status.
 // When transaction execution meets unexpected error, there may be some not-committed neither not-rollback keys left.
 // LockResolver deal with such keys when encountered.
+// LockResolver解析锁并缓存已解析的txn状态。
+// 当事务执行遇到意外的错误时，可能会有一些未提交也不回滚的键。LockResolver会在遇到这些键时处理。
 type LockResolver struct {
 	store Storage
 	mu    struct {
@@ -167,6 +169,9 @@ func (lr *LockResolver) getResolved(txnID uint64) (TxnStatus, bool) {
 //    commit status.
 // 3) Send `ResolveLock` cmd to the lock's region to resolve all locks belong to
 //    the same transaction.
+// 1)使用' lockTTL '获取所有过期的锁。只有太旧的锁才被认为是孤锁，稍后再处理。
+// 2)对于每个锁，查询主键以获取txn(它离开锁)的提交状态。
+// 3)发送' ResolveLock ' cmd到锁的区域，解析属于同一个事务的所有锁。
 func (lr *LockResolver) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks []*Lock) (int64, []uint64 /*pushed*/, error) {
 	var msBeforeTxnExpired txnExpireTime
 	if len(locks) == 0 {
@@ -179,13 +184,14 @@ func (lr *LockResolver) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks 
 	cleanTxns := make(map[uint64]map[RegionVerID]struct{})
 	pushed := make([]uint64, 0, len(locks))
 	for _, l := range locks {
+		// 用锁来获取事务的状态
 		status, err := lr.getTxnStatusFromLock(bo, l, callerStartTS)
 		if err != nil {
 			msBeforeTxnExpired.update(0)
 			err = errors.Trace(err)
 			return msBeforeTxnExpired.value(), nil, err
 		}
-
+		// 如果事务的ttl=0，说明事务已经提交或者回滚，将锁进行解析
 		if status.ttl == 0 {
 			// If the lock is committed or rollbacked, resolve lock.
 			cleanRegions, exists := cleanTxns[l.TxnID]
@@ -193,18 +199,19 @@ func (lr *LockResolver) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks 
 				cleanRegions = make(map[RegionVerID]struct{})
 				cleanTxns[l.TxnID] = cleanRegions
 			}
-
+			// 解析锁
 			err = lr.resolveLock(bo, l, status, cleanRegions)
 			if err != nil {
 				msBeforeTxnExpired.update(0)
 				err = errors.Trace(err)
 				return msBeforeTxnExpired.value(), nil, err
 			}
-		} else {
-			// Update the txn expire time.
+		} else { // 如果事务的ttl不为0，说明事务还未提交
+			// Update the txn expire time.更新事务的到期时间
 			msBeforeLockExpired := lr.store.GetOracle().UntilExpired(l.TxnID, status.ttl)
 			msBeforeTxnExpired.update(msBeforeLockExpired)
 			// In the write conflict scenes, callerStartTS is set to 0 to avoid unnecessary push minCommitTS operation.
+			// 在写冲突场景中，callerStartTS设置为0以避免不必要的推minCommitTS操作。
 			if callerStartTS > 0 {
 				pushFail = true
 				continue
@@ -249,6 +256,8 @@ func (t *txnExpireTime) value() int64 {
 // If the primary key is still locked, it will launch a Rollback to abort it.
 // To avoid unnecessarily aborting too many txns, it is wiser to wait a few
 // seconds before calling it after Prewrite.
+// 查询txn的状态(提交/回滚)。如果主键仍然被锁定，它将启动一个Rollback来终止它。
+// 为了避免不必要地中止过多的txns，在Prewrite之后调用它之前等待几秒钟。
 func (lr *LockResolver) GetTxnStatus(txnID uint64, callerStartTS uint64, primary []byte) (TxnStatus, error) {
 	var status TxnStatus
 	bo := NewBackoffer(context.Background(), cleanupMaxBackoff)
@@ -299,7 +308,12 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 	var req *tikvrpc.Request
 	// build the request
 	// YOUR CODE HERE (lab3).
-	panic("YOUR CODE HERE")
+	req = tikvrpc.NewRequest(tikvrpc.CmdCheckTxnStatus, &kvrpcpb.CheckTxnStatusRequest{
+		PrimaryKey: primary,
+		LockTs:     txnID,
+		CurrentTs:  currentTS,
+	})
+
 	for {
 		loc, err := lr.store.GetRegionCache().LocateKey(bo, primary)
 		if err != nil {
@@ -327,7 +341,15 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 		logutil.BgLogger().Debug("cmdResp", zap.Bool("nil", cmdResp == nil))
 		// Assign status with response
 		// YOUR CODE HERE (lab3).
-		panic("YOUR CODE HERE")
+		status.action = cmdResp.Action
+		// LockTtl不为0，说明还未提交，没有提交版本
+		if cmdResp.LockTtl != 0 {
+			status.ttl = cmdResp.LockTtl
+		} else { // 此时已提交，只需返回提交版本
+			status.commitTS = cmdResp.CommitVersion
+			// 保存事务的状态
+			lr.saveResolved(txnID, status)
+		}
 		return status, nil
 	}
 }
@@ -335,6 +357,8 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 // resolveLock resolve the lock for the given transaction status which is checked from primary key.
 // If status is committed, the secondary should also be committed.
 // If status is not committed and the
+// resolveLock解析从主键检查的给定事务状态的锁。
+// 如果status被提交，secondary也应该被提交。如果状态未提交，则
 func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cleanRegions map[RegionVerID]struct{}) error {
 	cleanWholeRegion := l.TxnSize >= bigTxnThreshold
 	for {
@@ -350,7 +374,14 @@ func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cl
 
 		// build the request
 		// YOUR CODE HERE (lab3).
-		panic("YOUR CODE HERE")
+		RLreq := &kvrpcpb.ResolveLockRequest{
+			StartVersion: l.TxnID,
+		}
+		// 如果事务状态为已提交，才会有提交版本
+		if status.IsCommitted() {
+			RLreq.CommitVersion = status.CommitTS()
+		}
+		req = tikvrpc.NewRequest(tikvrpc.CmdResolveLock, RLreq)
 
 		resp, err := lr.store.SendReq(bo, req, loc.Region, readTimeoutShort)
 		if err != nil {

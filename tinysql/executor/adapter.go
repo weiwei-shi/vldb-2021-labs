@@ -163,6 +163,7 @@ func (a *ExecStmt) IsReadOnly() bool {
 // Exec builds an Executor from a plan. If the Executor doesn't return result,
 // like the INSERT, UPDATE statements, it executes in this function, if the Executor returns
 // result, execution is done after this function returns, in the returned sqlexec.RecordSet Next method.
+// Exec从一个计划构建一个Executor。如果Executor没有返回结果，就像INSERT、UPDATE语句一样，它在这个函数中执行，如果Executor返回结果，则在这个函数返回后，在返回的sqlexec中执行。
 func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	defer func() {
 		r := recover()
@@ -179,15 +180,16 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	sctx := a.Ctx
 	var e Executor
 	// Hint: step I.4.1
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	// 通过物理执行计划，构建执行器
+	e, err = a.buildExecutor()
 	if err != nil {
 		return nil, err
 	}
 
 	// Hint: step I.4.2
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	err = e.Open(ctx)
 	if err != nil {
 		terror.Call(e.Close)
 		return nil, err
@@ -219,16 +221,18 @@ func (a *ExecStmt) HandleNoDelay(ctx context.Context, e Executor) (bool, sqlexec
 
 // handleNoDelay execute the given Executor if it does not return results to the client.
 // The first return value stands for if it handle the executor.
+// 如果这个 Executor 不会返回结果，那么它会在该函数内部立即执行。
+// 第一个返回值表示它是否处理执行器。
 func (a *ExecStmt) handleNoDelay(ctx context.Context, e Executor) (bool, sqlexec.RecordSet, error) {
 	toCheck := e
 
 	// If the executor doesn't return any result to the client, we execute it without delay.
 	if toCheck.Schema().Len() == 0 {
 		// Hint: step I.4.3
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		r, err := a.handleNoDelayExecutor(ctx, e)
 		//return true, r, err
-		return true, nil, nil
+		return true, r, err
 	}
 
 	return false, nil, nil
@@ -241,8 +245,9 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 	}()
 
 	// Hint: step I.4.3.1
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	// 通过 Next 函数递归执行 Executor
+	err = Next(ctx, e, newFirstChunk(e))
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +276,7 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 var QueryReplacer = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
 
 // FormatSQL is used to format the original SQL, e.g. truncating long SQL, appending prepared arguments.
+// 用于格式化原始SQL，例如截断长SQL，添加准备好的参数。
 func FormatSQL(sql string) stringutil.StringerFunc {
 	return func() string {
 		length := len(sql)

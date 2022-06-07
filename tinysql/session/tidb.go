@@ -177,8 +177,8 @@ func finishStmt(ctx context.Context, sctx sessionctx.Context, se *session, sessV
 	if !sessVars.InTxn() {
 		var err error
 		// Hint: step I.5.2.1
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = se.commitTxn(ctx)
 		if err != nil {
 			if _, ok := sql.(*executor.ExecStmt).StmtNode.(*ast.CommitStmt); ok {
 				err = errors.Annotatef(err, "previous statement: %s", se.GetSessionVars().PrevStmt)
@@ -210,6 +210,7 @@ func RunStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) 
 }
 
 // runStmt executes the sqlexec.Statement and commit or rollback the current transaction.
+// 执行sqlexec.Statement并提交或回滚当前事务。
 func runStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) (rs sqlexec.RecordSet, err error) {
 	se := sctx.(*session)
 	sessVars := se.GetSessionVars()
@@ -227,19 +228,21 @@ func runStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) 
 	}
 
 	// Hint: step I.3.3
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// 调用执行器的 Exec 函数
+	rs, err = s.Exec(ctx)
 	sessVars.TxnCtx.StatementCount++
 	if !s.IsReadOnly() {
 		// Handle the stmt commit/rollback.
 		if txn, err1 := sctx.Txn(false); err1 == nil {
 			if txn.Valid() {
 				if err != nil {
+					// 如果执行出错，进行回滚
 					sctx.StmtRollback()
 				} else {
 					// Hint: step I.3.4
-					// YOUR CODE HERE (lab4)
-					panic("YOUR CODE HERE")
+					// YOUR CODE HERE (lab4a)
+					// 如果执行没有出现错误，则将这一条语句 Commit 到整个事务所属的 membuffer 当中去
+					sctx.StmtCommit()
 				}
 			}
 		} else {

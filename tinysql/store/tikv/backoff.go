@@ -253,6 +253,7 @@ func (b *Backoffer) Backoff(typ backoffType, err error) error {
 
 // BackoffWithMaxSleep sleeps a while base on the backoffType and records the error message
 // and never sleep more than maxSleepMs for each sleep.
+// 根据backoffType休眠一段时间，并记录错误消息，每次休眠都不要超过maxSleepMs。
 func (b *Backoffer) BackoffWithMaxSleep(typ backoffType, maxSleepMs int, err error) error {
 	if strings.Contains(err.Error(), mismatchClusterID) {
 		logutil.BgLogger().Fatal("critical error", zap.Error(err))

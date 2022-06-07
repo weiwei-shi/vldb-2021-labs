@@ -92,8 +92,8 @@ type clientConn struct {
 	connectionID uint32            // atomically allocated by a global variable, unique in process scope.
 	user         string            // user of the client.
 	dbname       string            // default database name.
-	salt         []byte            // random bytes used for authentication.
-	alloc        arena.Allocator   // an memory allocator for reducing memory allocation.
+	salt         []byte            // random bytes used for authentication.用于身份验证
+	alloc        arena.Allocator   // an memory allocator for reducing memory allocation.内存分配器
 	lastPacket   []byte            // latest sql query string, currently used for logging error.
 	ctx          QueryCtx          // an interface to execute sql statements.
 	attrs        map[string]string // attributes parsed from client handshake response, not used for now.
@@ -101,7 +101,7 @@ type clientConn struct {
 	peerPort     string            // peer port
 	status       int32             // dispatching/reading/shutdown/waitshutdown
 	lastCode     uint16            // last error code
-	collation    uint8             // collation used by client, may be different from the collation used by database.
+	collation    uint8             // collation used by client, may be different from the collation used by database.排序规则
 }
 
 func (cc *clientConn) String() string {
@@ -537,6 +537,7 @@ func (cc *clientConn) PeerHost(hasPassword string) (host string, err error) {
 // Run reads client query and writes query result to client in for loop, if there is a panic during query handling,
 // it will be recovered and log the panic error.
 // This function returns and the connection is closed if there is an IO error or there is a panic.
+// Run在for循环中读取客户端查询并将查询结果写入客户端
 func (cc *clientConn) Run(ctx context.Context) {
 	const size = 4096
 	defer func() {
@@ -562,6 +563,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 	// the status to special values, for example: kill or graceful shutdown.
 	// The client connection would detect the events when it fails to change status
 	// by CAS operation, it would then take some actions accordingly.
+	// 当某些事件发生时，服务器可以通过将状态设置为特殊值来通知此客户端连接，当客户端连接无法通过CAS操作改变状态时，它将检测到事件，然后采取相应的操作。
 	for {
 		if !atomic.CompareAndSwapInt32(&cc.status, connStatusDispatching, connStatusReading) {
 			return
@@ -569,9 +571,11 @@ func (cc *clientConn) Run(ctx context.Context) {
 
 		cc.alloc.Reset()
 		// close connection when idle time is more than wait_timeout
+		// 获取wait_timeout
 		waitTimeout := cc.getSessionVarsWaitTimeout(ctx)
 		cc.pkt.setReadTimeout(time.Duration(waitTimeout) * time.Second)
 		start := time.Now()
+		// 获取请求数据
 		data, err := cc.readPacket()
 		if err != nil {
 			if terror.ErrorNotEqual(err, io.EOF) {
@@ -598,8 +602,8 @@ func (cc *clientConn) Run(ctx context.Context) {
 		}
 
 		// Hint: step I.2
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = cc.dispatch(ctx, data)
 		if err != nil {
 			if terror.ErrorEqual(err, io.EOF) {
 
@@ -666,9 +670,10 @@ func errStrForLog(err error) string {
 // dispatch handles client request based on command which is the first byte of the data.
 // It also gets a token from server which is used to limit the concurrently handling clients.
 // The most frequently used command is ComQuery.
+// 分派处理基于命令的客户端请求，命令是数据的第一个字节。它还从服务器获取一个令牌，用于限制客户端并发处理。
 func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	cc.lastPacket = data
-	cmd := data[0]
+	cmd := data[0] // 命令是数据的第一个字节
 	data = data[1:]
 	vars := cc.ctx.GetSessionVars()
 	atomic.StoreUint32(&vars.Killed, 0)
@@ -677,7 +682,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	}
 
 	dataStr := string(hack.String(data))
-
+	// 根据命令类型进行不同的处理
 	switch cmd {
 	case mysql.ComSleep:
 		// TODO: According to mysql document, this command is supposed to be used only internally.
@@ -691,14 +696,15 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 		// Input payload may end with byte '\0', we didn't find related mysql document about it, but mysql
 		// implementation accept that case. So trim the last '\0' here as if the payload an EOF string.
 		// See http://dev.mysql.com/doc/internals/en/com-query.html
+		// 修剪最后一个'\0'，并解析为SQL字符串
 		if len(data) > 0 && data[len(data)-1] == 0 {
 			data = data[:len(data)-1]
 			dataStr = string(hack.String(data))
 		}
 		var err error
 		// Hint: step I.2
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = cc.handleQuery(ctx, dataStr)
 		return err
 	case mysql.ComPing:
 		return cc.writeOK()
@@ -824,11 +830,13 @@ func (cc *clientConn) writeEOF(serverStatus uint16) error {
 }
 
 // handleQuery executes the sql query string and writes result set or result ok to the client.
+// 执行sql查询字符串，并将结果集或结果ok写入客户端。
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	var rss []ResultSet
 	// Hint: step I.3
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	// 执行sql查询字符串并获得结果集
+	rss, err = cc.ctx.Execute(ctx, sql)
 
 	if err != nil {
 		return err
@@ -885,6 +893,7 @@ func (cc *clientConn) handleFieldList(sql string) (err error) {
 // serverStatus, a flag bit represents server information.
 // fetchSize, the desired number of rows to be fetched each time when client uses cursor.
 // resultsets, it's used to support the MULTI_RESULTS capability in mysql protocol.
+// 将数据写入结果集，并使用rs.Next获取行数据。
 func (cc *clientConn) writeResultset(ctx context.Context, rs ResultSet, binary bool, serverStatus uint16, fetchSize int) (runErr error) {
 	defer func() {
 		// close ResultSet when cursor doesn't exist
@@ -937,6 +946,7 @@ func (cc *clientConn) writeColumnInfo(columns []*ColumnInfo, serverStatus uint16
 // writeChunks writes data from a Chunk, which filled data by a ResultSet, into a connection.
 // binary specifies the way to dump data. It throws any error while dumping data.
 // serverStatus, a flag bit represents server information
+// 将数据从由ResultSet填充的Chunk写入到连接中。
 func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool, serverStatus uint16) error {
 	data := cc.alloc.AllocWithLen(4, 1024)
 	req := rs.NewChunk()
@@ -945,8 +955,8 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 		var err error
 		// Here server.tidbResultSet implements Next method.
 		// Hint: step I.4.4
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = rs.Next(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -986,6 +996,7 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 // binary specifies the way to dump data. It throws any error while dumping data.
 // serverStatus, a flag bit represents server information.
 // fetchSize, the desired number of rows to be fetched each time when client uses cursor.
+// 将数据从由ResultSet填充的Chunk写入到连接中。
 func (cc *clientConn) writeChunksWithFetchSize(ctx context.Context, rs ResultSet, serverStatus uint16, fetchSize int) error {
 	fetchedRows := rs.GetFetchedRows()
 

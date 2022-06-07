@@ -147,8 +147,27 @@ func (s *tikvSnapshot) get(bo *Backoffer, k kv.Key) ([]byte, error) {
 			// If the key error is a lock, there are 2 possible cases:
 			//   1. The transaction is during commit, wait for a while and retry.
 			//   2. The transaction is dead with some locks left, resolve it.
+			// 如果密钥错误是一个锁，有两种可能的情况:
+			// 1.事务正在提交中，等待一段时间后重试。
+			// 2.事务已死，并留下一些锁，解决它。
 			// YOUR CODE HERE (lab3).
-			panic("YOUR CODE HERE")
+			// 用KeyErr获取锁
+			lock, err := extractLockFromKeyErr(keyErr)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			// 解析锁并得到事务的到期时间，如果事务已死，会进行处理
+			msBeforeTxnExpired, err := cli.ResolveLocks(bo, s.version.Ver, []*Lock{lock})
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			// 事务的到期时间大于0，说明事务还未提交，等待msBeforeTxnExpired的时间长度
+			if msBeforeTxnExpired > 0 {
+				err = bo.BackoffWithMaxSleep(boTxnLockFast, int(msBeforeTxnExpired), errors.New(keyErr.String()))
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
 			continue
 		}
 		return val, nil

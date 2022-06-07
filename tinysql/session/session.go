@@ -344,6 +344,7 @@ func (s *session) sysSessionPool() sessionPool {
 // This is used for executing some restricted sql statements, usually executed during a normal statement execution.
 // Unlike normal Exec, it doesn't reset statement status, doesn't commit or rollback the current transaction
 // and doesn't write binlog.
+// 用于执行一些受限的sql语句，通常在正常语句执行时执行。
 func (s *session) ExecRestrictedSQL(sql string) ([]chunk.Row, []*ast.ResultField, error) {
 	ctx := context.TODO()
 
@@ -577,6 +578,7 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 	charsetInfo, collation := s.sessionVars.GetCharsetInfo()
 
 	// Step1: Compile query string to abstract syntax trees(ASTs).
+	// Step1：将查询字符串编译为抽象语法树(ASTs)。
 	parseStartTime := time.Now()
 
 	var (
@@ -585,8 +587,8 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 	)
 
 	// Hint: step I.3.1
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	stmtNodes, warns, err = s.ParseSQL(ctx, sql, charsetInfo, collation)
 	if err != nil {
 		s.rollbackOnError(ctx)
 		logutil.Logger(ctx).Warn("parse SQL failed",
@@ -596,26 +598,28 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 	}
 	durParse := time.Since(parseStartTime)
 	s.GetSessionVars().DurationParse = durParse
-
+	// 定义将语法树编译为执行计划的编译器
 	compiler := executor.Compiler{Ctx: s}
 	multiQuery := len(stmtNodes) > 1
 	logutil.Logger(ctx).Debug("session execute", zap.Uint64("connID", connID),
 		zap.String("charsetInfo", charsetInfo), zap.String("collation", collation),
 		zap.Uint64("compiler conn", compiler.Ctx.GetSessionVars().ConnectionID),
 		zap.Bool("multiQuery", multiQuery))
+	// 逐个执行语法树的节点
 	for _, stmtNode := range stmtNodes {
 		s.sessionVars.StartTime = time.Now()
 		s.PrepareTxnCtx(ctx)
 
 		// Step2: Transform abstract syntax tree to a physical plan(stored in executor.ExecStmt).
 		// Some executions are done in compile stage, so we reset them before compile.
+		// Step2:将抽象语法树转换为物理计划(存储在executor.ExecStmt中)。有些执行是在编译阶段完成的，所以我们在编译前重置它们。
 		if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 			return nil, err
 		}
 		var stmt *executor.ExecStmt
 		// Hint: step I.3.2
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		stmt, err = compiler.Compile(ctx, stmtNode)
 		if stmt != nil {
 			logutil.Logger(ctx).Debug("stmt", zap.String("sql", stmt.Text))
 		}
@@ -630,10 +634,11 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		s.GetSessionVars().DurationCompile = durCompile
 
 		// Step3: Execute the physical plan.
+		// Step3：执行物理计划
 
 		// Hint: step I.3.3
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		recordSets, err = s.executeStatement(ctx, connID, stmtNode, stmt, recordSets, multiQuery)
 		if err != nil {
 			return nil, err
 		}
@@ -984,6 +989,7 @@ func initLoadCommonGlobalVarsSQL() {
 }
 
 // loadCommonGlobalVariablesIfNeeded loads and applies commonly used global variables for the session.
+// 为session加载和应用常用的全局变量。
 func (s *session) loadCommonGlobalVariablesIfNeeded() error {
 	initLoadCommonGlobalVarsSQL()
 	vars := s.sessionVars
@@ -1038,6 +1044,7 @@ func (s *session) loadCommonGlobalVariablesIfNeeded() error {
 
 // PrepareTxnCtx starts a goroutine to begin a transaction if needed, and creates a new transaction context.
 // It is called before we execute a sql query.
+// 启动一个goroutine来开始一个事务，并创建一个新的事务上下文。在执行sql查询之前调用。
 func (s *session) PrepareTxnCtx(ctx context.Context) {
 	if s.txn.validOrPending() {
 		return

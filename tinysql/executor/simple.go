@@ -79,13 +79,14 @@ func (e *SimpleExec) executeUse(s *ast.UseStmt) error {
 func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 	// If BEGIN is the first statement in TxnCtx, we can reuse the existing transaction, without the
 	// need to call NewTxn, which commits the existing transaction and begins a new one.
+	// 如果BEGIN是TxnCtx中的第一条语句，我们可以重用现有的事务，而不需要调用NewTxn
 	txnCtx := e.ctx.GetSessionVars().TxnCtx
 	// create a transaction inside another is equal to commit and begin
 	if txnCtx.History != nil {
 		var err error
 		// Hint: step I.5.1
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = e.ctx.NewTxn(ctx)
 		if err != nil {
 			return err
 		}
@@ -97,15 +98,16 @@ func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 	// Call ctx.Txn(true) to active pending txn.
 	var err error
 	// Hint: step I.5.1
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	// 等待事务获取到 startTS
+	_, err = e.ctx.Txn(true)
 	return err
 }
 
 func (e *SimpleExec) executeCommit(s *ast.CommitStmt) {
 	// Hint: step I.5.2
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	e.ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusInTrans, false)
 }
 
 func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
@@ -118,16 +120,17 @@ func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
 	)
 
 	// Hint: step I.5.3
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4a)
+	// 获取当前事务，但是不会等待事务激活
+	txn, err = e.ctx.Txn(false)
 	if err != nil {
 		return err
 	}
 	if txn.Valid() {
 		sessVars.TxnCtx.ClearDelta()
 		// Hint: step I.5.3
-		// YOUR CODE HERE (lab4)
-		panic("YOUR CODE HERE")
+		// YOUR CODE HERE (lab4a)
+		err = txn.Rollback()
 		return err
 	}
 	return nil
