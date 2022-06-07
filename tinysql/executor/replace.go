@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/table/tables"
@@ -81,6 +82,7 @@ func (e *ReplaceExec) removeRow(ctx context.Context, txn kv.Transaction, handle 
 }
 
 // replaceRow removes all duplicate rows for one row, then inserts it.
+// 删除一行的所有重复行，然后插入它
 func (e *ReplaceExec) replaceRow(ctx context.Context, r toBeCheckedRow) error {
 	txn, err := e.ctx.Txn(true)
 	if err != nil {

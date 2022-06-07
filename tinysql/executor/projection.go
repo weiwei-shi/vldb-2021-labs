@@ -196,7 +196,7 @@ func (e *ProjectionExec) parallelExecute(ctx context.Context, chk *chunk.Chunk) 
 	)
 	// Get the output from fetcher
 	// Hint: step III.3.1
-	// YOUR CODE HERE (lab4)
+	// YOUR CODE HERE (lab4c)
 	panic("YOUR CODE HERE")
 	if !ok {
 		return nil
@@ -340,7 +340,7 @@ func (f *projectionInputFetcher) run(ctx context.Context) {
 
 		// Send processed output to global output
 		// Hint: step III.3.2
-		// YOUR CODE HERE (lab4)
+		// YOUR CODE HERE (lab4c)
 		panic("YOUR CODE HERE")
 
 		requiredRows := atomic.LoadInt64(&f.proj.parentReqRows)
@@ -353,7 +353,7 @@ func (f *projectionInputFetcher) run(ctx context.Context) {
 
 		// Give the input and output back to worker
 		// Hint: step III.3.2
-		// YOUR CODE HERE (lab4)
+		// YOUR CODE HERE (lab4c)
 		panic("YOUR CODE HERE")
 	}
 }
@@ -397,7 +397,7 @@ func (w *projectionWorker) run(ctx context.Context) {
 		)
 		// Get input data
 		// Hint: step III.3.3
-		// YOUR CODE HERE (lab4)
+		// YOUR CODE HERE (lab4c)
 		panic("YOUR CODE HERE")
 		if input == nil {
 			return
@@ -405,7 +405,7 @@ func (w *projectionWorker) run(ctx context.Context) {
 
 		// Get output data
 		// Hint: step III.3.3
-		// YOUR CODE HERE (lab4)
+		// YOUR CODE HERE (lab4c)
 		panic("YOUR CODE HERE")
 		if output == nil {
 			return
@@ -422,7 +422,7 @@ func (w *projectionWorker) run(ctx context.Context) {
 
 		// Give the input channel back
 		// Hint: step III.3.3
-		// YOUR CODE HERE (lab4)
+		// YOUR CODE HERE (lab4c)
 		panic("YOUR CODE HERE")
 	}
 }

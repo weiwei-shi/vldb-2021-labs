@@ -222,6 +222,7 @@ func (b *executorBuilder) buildSet(v *plannercore.Set) Executor {
 	return e
 }
 
+// 构造InsertExec
 func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 	b.startTS = b.ctx.GetSessionVars().TxnCtx.GetForUpdateTS()
 	selectExec := b.build(v.SelectPlan)
@@ -248,8 +249,9 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 	}
 	var err error
 	// Hint: step II.1
-	// YOUR CODE HERE (lab4)
-	panic("YOUR CODE HERE")
+	// YOUR CODE HERE (lab4b)
+	// 生成执行所需要涉及到的 Columns 信息
+	err = ivs.initInsertColumns()
 	if err != nil {
 		b.err = err
 		return nil
@@ -559,7 +561,7 @@ func (b *executorBuilder) buildSelection(v *plannercore.PhysicalSelection) Execu
 func (b *executorBuilder) buildProjection(v *plannercore.PhysicalProjection) Executor {
 	var childExec Executor
 	// Hint: step III.1
-	// YOUR CODE HERE (lab4)
+	// YOUR CODE HERE (lab4c)
 	panic("YOUR CODE HERE")
 	if b.err != nil {
 		return nil
